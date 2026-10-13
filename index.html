@@ -72,8 +72,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 const mount=document.getElementById('game');
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xc6dce9);
-scene.fog=new THREE.Fog(0xc6dce9,34,82);
-const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,.1,180);
+scene.fog=new THREE.Fog(0xc6dce9,90,260);
+const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,.1,420);
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setSize(innerWidth,innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
@@ -241,6 +241,160 @@ function makeShop(s){
 }
 shops.forEach(makeShop);
 
+
+// EXPANDED CITY WORLD: procedural streets, realistic building facades, sidewalks,
+// traffic markings, street trees and lamps. Built from lightweight meshes for Android.
+const citySolidRects=[];
+const cityNeonMaterials=[];
+const cityBuildings=[];
+const roadMat=mat(0x252d35,.92,.02),roadLine=mat(0xe8e6d8,.65),concrete=mat(0x929ba2,.9),
+      curbMat=mat(0xb9c0c4,.85),windowMat=mat(0x29485b,.22,.55,{emissive:0x071724,emissiveIntensity:.16}),
+      litWindowMat=mat(0xffdca1,.35,.1,{emissive:0xffb84c,emissiveIntensity:.22}),
+      metalMat=mat(0x3a4650,.5,.65),treeLeaf=mat(0x315d4b,.95),trunkMat=mat(0x604a39,.95);
+function cityBox(w,h,d,m,x,y,z,cast=false){
+ return addBox(scene,w,h,d,m,x,y,z,cast,true);
+}
+function cityRoadX(z,width=10){
+ cityBox(220,.12,width,roadMat,0,-.12,z);
+ cityBox(220,.035,.13,roadLine,0,-.045,z-width*.31,false);
+ cityBox(220,.035,.13,roadLine,0,-.045,z+width*.31,false);
+ for(let x=-100;x<105;x+=7) cityBox(2.8,.025,.12,roadLine,x,-.04,z,false);
+ cityBox(220,.2,.75,curbMat,0,-.04,z-width/2-.45);
+ cityBox(220,.2,.75,curbMat,0,-.04,z+width/2+.45);
+ cityBox(220,.12,2.2,concrete,0,-.08,z-width/2-1.7);
+ cityBox(220,.12,2.2,concrete,0,-.08,z+width/2+1.7);
+}
+function cityRoadZ(x,width=10){
+ cityBox(width,.12,220,roadMat,x,-.12,0);
+ cityBox(.13,.035,220,roadLine,x-width*.31,-.045,0,false);
+ cityBox(.13,.035,220,roadLine,x+width*.31,-.045,0,false);
+ for(let z=-100;z<105;z+=7) cityBox(.12,.025,2.8,roadLine,x,-.04,z,false);
+ cityBox(.75,.2,220,curbMat,x-width/2-.45,-.04,0);
+ cityBox(.75,.2,220,curbMat,x+width/2+.45,-.04,0);
+ cityBox(2.2,.12,220,concrete,x-width/2-1.7,-.08,0);
+ cityBox(2.2,.12,220,concrete,x+width/2+1.7,-.08,0);
+}
+function addCityBuilding(x,z,w,d,h,style=0){
+ const g=new THREE.Group();scene.add(g);g.position.set(x,0,z);
+ const palettes=[0x9ca8ae,0x777f88,0xc0b8aa,0x596a76,0xb0b9bd,0x82796f,0x6c8287];
+ const facade=mat(palettes[style%palettes.length],.82,.08);
+ const base=addBox(g,w,h,d,facade,0,h/2,0,true,true);
+ base.castShadow=true; cityBuildings.push({x,z,w,d,h});
+ citySolidRects.push({x,z,hx:w/2+.35,hz:d/2+.35});
+ // Ground floor glazing and dark shopfront band.
+ addBox(g,w*.92,Math.min(3.2,h*.2),.08,windowMat,0,Math.min(1.9,h*.12),d/2+.045,false);
+ addBox(g,w*1.015,.28,d*1.015,metalMat,0,.28,0,false);
+ // Repeated window bays; fewer polygons to keep the city mobile-friendly.
+ const cols=Math.max(2,Math.floor(w/2.7)), rows=Math.max(2,Math.floor((h-2.2)/2.7));
+ const ww=Math.min(.95,(w-1)/(cols*1.45)), wh=.95;
+ for(let row=0;row<rows;row++){
+  for(let col=0;col<cols;col++){
+   const wx=-w/2+(col+.5)*w/cols, wy=1.65+row*((h-2.5)/rows);
+   const winmat=((row+col+style)%9===0)?litWindowMat:windowMat;
+   for(const side of [-1,1]){
+    const win=addBox(g,ww,wh,.045,winmat,wx,wy,side*(d/2+.025),false);
+    if(side===1 && row===0 && style%3===0) win.material=windowMat;
+   }
+   // side windows are set back on the side faces
+   if(col%2===0){
+    addBox(g,.045,wh,Math.min(.9,d/(rows+1)),windowMat,sideX(w,style),wy,0,false);
+   }
+  }
+ }
+ // Rooftop parapet and rooftop plant/utility boxes.
+ addBox(g,w+.12,.35,.12,metalMat,0,h+.12,d/2,false);
+ addBox(g,.12,.35,d+.12,metalMat,0,h+.12,0,false);
+ if(h>13){
+  addBox(g,w*.35,.75,d*.3,metalMat,-w*.18,h+.5,0,false);
+  addBox(g,w*.22,.5,d*.24,concrete,w*.22,h+.38,0,false);
+ }
+ // A few buildings carry glowing rooftop signage.
+ if(style%4===0 && w>9){
+  const neon=mat([0x19d7ff,0xff3e9d,0xffb52e,0x8b5cff][style%4],.25,.1,{emissive:[0x19d7ff,0xff3e9d,0xffb52e,0x8b5cff][style%4],emissiveIntensity:.65});
+  cityNeonMaterials.push(neon);
+  addBox(g,w*.52,.18,.14,neon,0,h*.78,d/2+.12,false);
+ }
+}
+function sideX(w,style){return (style%2?1:-1)*(w/2+.025);}
+function addStreetTree(x,z){
+ const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.28,2.5,7),trunkMat);trunk.position.set(x,1.25,z);trunk.castShadow=true;scene.add(trunk);
+ const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(1.55,1),treeLeaf);crown.position.set(x,3.15,z);crown.scale.set(1,1.05,1);crown.castShadow=true;scene.add(crown);
+ citySolidRects.push({x,z,hx:.65,hz:.65});
+}
+function addStreetLamp(x,z){
+ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.07,.11,5.3,7),metalMat);pole.position.set(x,2.65,z);scene.add(pole);
+ cityBox(.95,.10,.12,metalMat,x+.4,5.22,z,false);
+ const bulb=new THREE.Mesh(new THREE.BoxGeometry(.5,.12,.3),mat(0xffe2ad,.2,.05,{emissive:0xffcf7c,emissiveIntensity:.6}));bulb.position.set(x+.75,5.12,z);scene.add(bulb);
+ const lamp=new THREE.PointLight(0xffc982,0,10);lamp.position.set(x+.75,4.95,z);scene.add(lamp);cityLampLights.push(lamp);
+}
+const cityLampLights=[];
+function buildCity(){
+ // City grid begins beyond the central shopping complex. Wide avenues create open sightlines.
+ [-38,0,38,76].forEach(z=>cityRoadX(z, z===0?12:9));
+ [-38,0,38,76].forEach(x=>cityRoadZ(x, x===0?12:9));
+ // Crosswalk stripes at major intersections.
+ for(const ix of [-38,0,38,76]){
+  for(const iz of [-38,0,38,76]){
+   for(let k=-4;k<=4;k++){
+    cityBox(.65,.025,4.8,roadLine,ix+k*.95,-.035,iz-7,false);
+    cityBox(4.8,.025,.65,roadLine,ix-7,-.035,iz+k*.95,false);
+   }
+  }
+ }
+ // Urban blocks around the mall: offices, apartments, hotels and small retail.
+ const blocks=[
+  [-25,-25], [15,-25], [55,-25], [95,-25],
+  [-25,15], [15,15], [55,15], [95,15],
+  [-25,55], [15,55], [55,55], [95,55],
+  [-25,95], [15,95], [55,95], [95,95]
+ ];
+ let seed=17;
+ const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+ blocks.forEach(([bx,bz],bi)=>{
+  // Keep the existing mall campus open around the centre.
+  for(let n=0;n<3;n++){
+   const x=bx+(n-1)*8+(rnd()-.5)*2;
+   const z=bz+(rnd()-.5)*8;
+   if(Math.abs(x)<29&&Math.abs(z)<29) continue;
+   const w=6+rnd()*5,d=6+rnd()*5,h=7+rnd()*23;
+   addCityBuilding(x,z,w,d,h,(bi+n)%7);
+  }
+ });
+ // Landmark towers on the far skyline.
+ addCityBuilding(-67,-64,16,15,42,3);
+ addCityBuilding(-47,-72,13,13,31,1);
+ addCityBuilding(65,-68,18,16,49,4);
+ addCityBuilding(86,-60,13,15,36,0);
+ addCityBuilding(-68,63,18,15,45,6);
+ addCityBuilding(65,66,17,17,40,2);
+ // Street furniture on sidewalks, clear of road centres.
+ for(let z=-65;z<=95;z+=19){
+  for(const x of [-32,-5,32,70,89]) addStreetTree(x,z);
+ }
+ for(let z=-60;z<=90;z+=24){
+  for(const x of [-34, -4,34,72,91]) addStreetLamp(x,z);
+ }
+ // Small parked cars, with glass cabin and lights, along the curb.
+ function car(x,z,color,rot=0){
+  const g=new THREE.Group();scene.add(g);g.position.set(x,.1,z);g.rotation.y=rot;
+  addBox(g,2.25,.65,4.1,mat(color,.45,.22),0,.65,0,true);
+  addBox(g,1.55,.65,1.9,windowMat,0,1.23,-.05,false);
+  for(const wx of [-.9,.9]) for(const wz of [-1.25,1.25]){
+   const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.22,10),mat(0x171b20,.8));wheel.rotation.z=Math.PI/2;wheel.position.set(wx,.35,wz);g.add(wheel);
+  }
+  for(const lx of [-.72,.72]){
+   addBox(g,.35,.18,.08,mat(0xfff1c4,.3,.05,{emissive:0xffdca0,emissiveIntensity:.35}),lx,.72,2.06,false);
+   addBox(g,.35,.18,.08,mat(0xf02f38,.3,.05,{emissive:0xf02f38,emissiveIntensity:.25}),lx,.72,-2.06,false);
+  }
+ }
+ car(-28,-11,0x2d6fa3);car(28,11,0xb9bfc4,Math.PI);car(-52,4,0x9b3d3d,Math.PI/2);car(52,-4,0x242d35,-Math.PI/2);
+}
+buildCity();
+// A city destination marker gives the player a visible reason to explore beyond the mall.
+const plazaRing=new THREE.Mesh(new THREE.TorusGeometry(2.2,.11,8,36),mat(0x39d8e8,.25,.3,{emissive:0x149bb0,emissiveIntensity:.5}));
+plazaRing.rotation.x=Math.PI/2;plazaRing.position.set(38,.08,38);scene.add(plazaRing);
+
+
 // Benches, planters, shrubs and decorative tall plants.
 function plant(x,z,scale=1){
  const pot= new THREE.Mesh(new THREE.CylinderGeometry(.34*scale,.45*scale,.75*scale,12),M.wood);
@@ -324,7 +478,10 @@ function blockedPosition(x,z){
   if(Math.hypot(x-bx,z-bz)<r+PLAYER_RADIUS) return true;
  }
  // Keep a little clearance from the outer walls.
- return x < -21.2 || x > 21.2 || z < -21.2 || z > 21.2;
+ for(const b of citySolidRects){
+  if(circleHitsRect(x,z,b.x,b.z,b.hx,b.hz)) return true;
+ }
+ return x < -102 || x > 102 || z < -102 || z > 102;
 }
 function movePlayerWithCollision(dx,dz){
  const x=player.position.x,z=player.position.z;
@@ -462,7 +619,7 @@ function animate(){
   const dir=forward.clone().multiplyScalar(-moveY).add(right.multiplyScalar(moveX));
   if(dir.length()>1)dir.normalize();
   if(dir.length()>.05){
-   const step=dt*3.6;
+   const step=dt*6.0;
    movePlayerWithCollision(dir.x*step,dir.z*step);
    player.rotation.y=Math.atan2(dir.x,dir.z);
    walkT+=dt*9;
@@ -476,9 +633,9 @@ function animate(){
  cameraTarget.set(player.position.x,1.35,player.position.z);
  const dist=8.3;
  cameraDesired.set(
-  THREE.MathUtils.clamp(player.position.x+Math.sin(yaw)*dist,-20.2,20.2),
+  THREE.MathUtils.clamp(player.position.x+Math.sin(yaw)*dist,-98,98),
   THREE.MathUtils.clamp(player.position.y+4.1+pitch*2.5,2.1,7.5),
-  THREE.MathUtils.clamp(player.position.z+Math.cos(yaw)*dist,-20.2,20.2)
+  THREE.MathUtils.clamp(player.position.z+Math.cos(yaw)*dist,-98,98)
  );
  cameraDirection.copy(cameraDesired).sub(cameraTarget);
  const wantedDistance=cameraDirection.length();
@@ -495,8 +652,8 @@ function animate(){
  if(cameraHits.length) safeDistance=Math.max(2.0,Math.min(wantedDistance,cameraHits[0].distance-.35));
  const safeCamera=cameraTarget.clone().addScaledVector(cameraDirection,safeDistance);
  camera.position.lerp(safeCamera,.22);
- camera.position.x=THREE.MathUtils.clamp(camera.position.x,-21,21);
- camera.position.z=THREE.MathUtils.clamp(camera.position.z,-21,21);
+ camera.position.x=THREE.MathUtils.clamp(camera.position.x,-101,101);
+ camera.position.z=THREE.MathUtils.clamp(camera.position.z,-101,101);
  camera.lookAt(cameraTarget);
  const near=nearestShop();
  document.getElementById('interact').textContent=near?'OPEN '+near.data.name:'OPEN NEAREST SHOP';
