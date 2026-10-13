@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VirtualShoppingWorld</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101522;font-family:system-ui,Arial;color:#fff;touch-action:none}
+#game{position:absolute;inset:0}canvas{display:block}
+#hud{position:absolute;inset:0;pointer-events:none}
+.top{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.pill{background:#101522d9;border:1px solid #ffffff30;border-radius:14px;padding:9px 12px;backdrop-filter:blur(8px);font-size:12px;box-shadow:0 4px 20px #0004}
+#title{font-weight:800;font-size:15px;letter-spacing:.2px}#sub{opacity:.75;font-size:11px;margin-top:2px}
+#status{max-width:52%;text-align:right}
+#bottom{position:absolute;left:12px;right:12px;bottom:16px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+#joystick{pointer-events:auto;width:126px;height:126px;border-radius:50%;background:#ffffff20;border:2px solid #ffffff65;position:relative;touch-action:none;box-shadow:0 4px 24px #0005}
+#knob{width:48px;height:48px;border-radius:50%;background:#eaf4ffdd;border:2px solid #fff;position:absolute;left:37px;top:37px}
+.actions{pointer-events:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+button{border:1px solid #ffffff65;background:#18253beF;color:white;border-radius:14px;padding:12px 15px;font-weight:700;font-size:12px;box-shadow:0 4px 18px #0004}
+button:active{transform:scale(.97)}#shopPanel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(330px,88vw);background:#111b2af2;border:1px solid #ffffff45;border-radius:20px;padding:18px;display:none;pointer-events:auto;box-shadow:0 18px 60px #0009}
+#shopPanel h2{font-size:19px;margin:0 0 6px}#shopPanel p{font-size:13px;opacity:.82;line-height:1.45}#items{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.item{background:#ffffff12;border:1px solid #ffffff24;border-radius:12px;padding:10px;font-size:12px}
+.item b{display:block;margin-bottom:4px}.item button{width:100%;padding:8px;margin-top:7px}
+#cart{position:absolute;right:12px;top:76px;pointer-events:none}
+#hint{position:absolute;left:50%;bottom:154px;transform:translateX(-50%);background:#101522c9;padding:8px 12px;border-radius:12px;font-size:11px;white-space:nowrap;max-width:90vw}
+#toast{position:absolute;top:75px;left:50%;transform:translateX(-50%);background:#0d9f79;color:white;padding:9px 14px;border-radius:12px;display:none;font-size:12px;font-weight:700}
+@media(min-width:700px){#joystick{width:145px;height:145px}#knob{left:45px;top:45px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud">
+  <div class="top">
+    <div class="pill"><div id="title">VIRTUAL SHOPPING WORLD</div><div id="sub">Explore • Discover • Shop</div></div>
+    <div class="pill" id="status">🛒 Cart: <b id="cartCount">0</b><br><span id="cartTotal">₹0</span></div>
+  </div>
+  <div class="pill" id="cart">Touch a shop to browse</div>
+  <div id="hint">Move with joystick • Drag screen to look around • Walk to a shop</div>
+  <div id="toast"></div>
+  <div id="bottom">
+    <div id="joystick"><div id="knob"></div></div>
+    <div class="actions"><button id="interact">OPEN NEAREST SHOP</button><button id="viewBtn">RESET VIEW</button></div>
+  </div>
+  <div id="shopPanel"><h2 id="shopName">Shop</h2><p id="shopDesc">Browse products in this store.</p><div id="items"></div><button id="closeShop" style="width:100%">CONTINUE EXPLORING</button></div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const mount=document.getElementById('game');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9db8d0); scene.fog=new THREE.Fog(0x9db8d0,24,75);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,150);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;mount.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xeaf5ff,0x53606f,2.1));
+const sun=new THREE.DirectionalLight(0xfff0d5,2.2);sun.position.set(-8,18,9);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
+function mat(color,roughness=.78,metalness=0){return new THREE.MeshStandardMaterial({color,roughness,metalness})}
+const mats={floor:mat(0xd8dde4),wall:mat(0xe8edf2),dark:mat(0x26384d),glass:new THREE.MeshStandardMaterial({color:0x77c9ed,roughness:.18,metalness:.2,transparent:true,opacity:.45}),gold:mat(0xf0bd57,.35,.2),red:mat(0xd94e59),blue:mat(0x3f83d9),green:mat(0x2b9b78),white:mat(0xffffff),wood:mat(0x936b4a),black:mat(0x202733)};
+function box(w,h,d,material,x,y,z,cast=true){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=true;scene.add(m);return m}
+box(42,.5,42,mats.floor,0,-.3,0,false);
+const grid=new THREE.GridHelper(42,42,0xaeb8c3,0xc3cbd4);grid.position.y=-.04;scene.add(grid);
+// Mall shell and skylight beams
+box(42,.5,1,mats.wall,0,7,-20,false);box(1,7,42,mats.wall,-20.5,3.2,0,false);box(1,7,42,mats.wall,20.5,3.2,0,false);
+for(let x=-16;x<=16;x+=8){box(.25,7,39,mats.white,x,6.5,0,false)}
+for(let z=-16;z<=16;z+=8){box(39,.25,.25,mats.white,0,6.5,z,false)}
+// polished central walkway
+box(8,.03,38,mat(0xb9d9e7,.22,.15),0,-.02,0,false);
+const shops=[
+ {name:'TECH HUB',desc:'Phones, headphones and smart gadgets.',x:-11,z:-7,color:0x3e83d8,products:[['Smartphone',14999],['Headphones',2499],['Smart Watch',3999],['Mini Speaker',1799]]},
+ {name:'SNEAKER STREET',desc:'Fresh kicks and everyday footwear.',x:11,z:-7,color:0xd94e59,products:[['Runner Sneakers',3299],['Classic Shoes',2199],['Sport Slides',799],['Street Cap',599]]},
+ {name:'STYLE AVENUE',desc:'Fashion picks for your next look.',x:-11,z:9,color:0x2b9b78,products:[['Denim Jacket',2799],['Everyday Tee',699],['Backpack',1599],['Sunglasses',999]]},
+ {name:'HOME & LIVING',desc:'Small upgrades for your space.',x:11,z:9,color:0xb98743,products:[['Desk Lamp',1199],['Coffee Mug',299],['Cushion Set',899],['Plant Pot',449]]}
+];
+const shopMeshes=[];
+shops.forEach((s,i)=>{
+ const c=mat(s.color,.42,.1);
+ // storefront body, awning and sign
+ box(8,4.4,5,mats.wall,s.x,2.2,s.z,false);
+ box(8.3,.45,5.25,c,s.x,4.5,s.z,false);
+ box(7.5,2.2,.12,mats.glass,s.x,2.25,s.z+2.54,false);
+ box(7.9,.72,.35,mats.dark,s.x,5.05,s.z+2.68,false);
+ // stylized glowing sign blocks
+ for(let k=0;k<Math.min(6,s.name.length);k++) box(.35,.1,.05,mats.gold,s.x-2.7+k*.95,5.06,s.z+2.88,false);
+ // shelves inside and product blocks
+ for(let row=0;row<2;row++){
+   box(5.7,.16,.75,mats.wood,s.x,1.1+row*1.15,s.z+.2,false);
+   for(let k=0;k<5;k++){const pm=[mats.red,mats.blue,mats.green,mats.gold,mats.white][(k+row+i)%5];box(.55,.55,.5,pm,s.x-2.25+k*1.12,1.45+row*1.15,s.z+.2,true)}
+ }
+ // side pillars
+ box(.25,4.4,.35,mats.dark,s.x-4,2.2,s.z+2.65,false);box(.25,4.4,.35,mats.dark,s.x+4,2.2,s.z+2.65,false);
+ const marker=new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,.08,24),new THREE.MeshStandardMaterial({color:s.color,emissive:s.color,emissiveIntensity:.25}));marker.position.set(s.x,0.06,s.z+4.3);scene.add(marker);
+ const label=makeLabel(s.name);label.position.set(s.x,6.15,s.z+2.9);scene.add(label);
+ shopMeshes.push({data:s,marker,label});
+});
+// plants and benches
+function plant(x,z){box(.7,.55,.7,mats.wood,x,.28,z);const crown=new THREE.Mesh(new THREE.SphereGeometry(.75,12,10),mat(0x399767));crown.position.set(x,1.2,z);crown.castShadow=true;scene.add(crown)}
+[[-17,-17],[17,-17],[-17,17],[17,17],[-5,-16],[5,16]].forEach(p=>plant(...p));
+for(let z=-8;z<=8;z+=8){box(2.5,.35,.7,mats.wood,0,.45,z);box(2.5,.1,.75,mats.dark,0,.68,z)}
+function makeLabel(text){const c=document.createElement('canvas');c.width=512;c.height=96;const ctx=c.getContext('2d');ctx.fillStyle='#16243a';ctx.fillRect(0,0,512,96);ctx.fillStyle='white';ctx.font='bold 42px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,49);const t=new THREE.CanvasTexture(c);const m=new THREE.Mesh(new THREE.PlaneGeometry(5.2,.95),new THREE.MeshBasicMaterial({map:t,transparent:false}));return m}
+// Player: simple stylized 3D avatar with head, torso, arms, legs
+const player=new THREE.Group();scene.add(player);player.position.set(0,0,14);
+const skin=mat(0xd6a17c),shirt=mat(0x255cc7),pants=mat(0x263449),shoe=mat(0xf4f5f7);
+const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.42,.75,4,8),shirt);torso.position.y=1.25;torso.castShadow=true;player.add(torso);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.28,16,12),skin);head.position.y=2.05;head.castShadow=true;player.add(head);
+const hair=new THREE.Mesh(new THREE.SphereGeometry(.29,12,8,0,Math.PI*2,0,Math.PI*.55),mat(0x30231e));hair.position.y=2.15;player.add(hair);
+for(const side of [-1,1]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.13,.55,3,6),shirt);arm.position.set(side*.5,1.25,0);arm.rotation.z=side*.12;player.add(arm);const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.16,.58,3,6),pants);leg.position.set(side*.2,.48,0);player.add(leg);const foot=new THREE.Mesh(new THREE.BoxGeometry(.28,.13,.42),shoe);foot.position.set(side*.2,.12,-.08);player.add(foot)}
+const shadow=new THREE.Mesh(new THREE.CircleGeometry(.55,24),new THREE.MeshBasicMaterial({color:0x26313e,transparent:true,opacity:.25}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.015;player.add(shadow);
+let yaw=0,pitch=-.18,moveX=0,moveY=0,dragging=false,lastX=0,lastY=0,walkT=0;
+const joystick=document.getElementById('joystick'),knob=document.getElementById('knob');
+function joy(e){const r=joystick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const max=r.width*.31;const l=Math.hypot(dx,dy);if(l>max){dx*=max/l;dy*=max/l}moveX=dx/max;moveY=dy/max;knob.style.transform=`translate(${dx}px,${dy}px)`}
+joystick.addEventListener('pointerdown',e=>{joystick.setPointerCapture(e.pointerId);joy(e)});joystick.addEventListener('pointermove',e=>{if(e.buttons)joy(e)});function stopJoy(){moveX=moveY=0;knob.style.transform='translate(0,0)'}joystick.addEventListener('pointerup',stopJoy);joystick.addEventListener('pointercancel',stopJoy);
+renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY});window.addEventListener('pointerup',()=>dragging=false);window.addEventListener('pointermove',e=>{if(dragging && e.target===renderer.domElement){yaw-=(e.clientX-lastX)*.005;pitch=Math.max(-.75,Math.min(.25,pitch+(e.clientY-lastY)*.003));lastX=e.clientX;lastY=e.clientY}});
+function nearestShop(){let best=null,dist=1e9;for(const sm of shopMeshes){const d=Math.hypot(player.position.x-sm.data.x,player.position.z-(sm.data.z+4));if(d<dist){best=sm;dist=d}}return dist<7?best:null}
+function showToast(t){const el=document.getElementById('toast');el.textContent=t;el.style.display='block';setTimeout(()=>el.style.display='none',1700)}
+let cart=[],activeShop=null;
+function openShop(sm){if(!sm){showToast('Walk closer to a shop first');return}activeShop=sm.data;document.getElementById('shopName').textContent=activeShop.name;document.getElementById('shopDesc').textContent=activeShop.desc;const items=document.getElementById('items');items.innerHTML='';activeShop.products.forEach(([name,price])=>{const d=document.createElement('div');d.className='item';d.innerHTML=`<b>${name}</b><span>₹${price.toLocaleString('en-IN')}</span>`;const b=document.createElement('button');b.textContent='ADD TO CART';b.onclick=()=>{cart.push({name,price,shop:activeShop.name});updateCart();showToast(name+' added')};d.appendChild(b);items.appendChild(d)});document.getElementById('shopPanel').style.display='block'}
+function updateCart(){document.getElementById('cartCount').textContent=cart.length;document.getElementById('cartTotal').textContent='₹'+cart.reduce((a,b)=>a+b.price,0).toLocaleString('en-IN')}
+document.getElementById('interact').onclick=()=>openShop(nearestShop());
+document.getElementById('closeShop').onclick=()=>document.getElementById('shopPanel').style.display='none';
+document.getElementById('viewBtn').onclick=()=>{yaw=0;pitch=-.18;showToast('View reset')};
+document.getElementById('cart').textContent='4 shops • 16 sample products';
+function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.04);if(document.getElementById('shopPanel').style.display!=='block'){const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));const dir=forward.clone().multiplyScalar(-moveY).add(right.multiplyScalar(moveX));if(dir.length()>1){dir.normalize()}if(dir.length()>.05){player.position.addScaledVector(dir,dt*4.0);player.rotation.y=Math.atan2(dir.x,dir.z);walkT+=dt*10;player.children[3].rotation.x=Math.sin(walkT)*.45;player.children[4].rotation.x=-Math.sin(walkT)*.45;}player.position.x=Math.max(-18,Math.min(18,player.position.x));player.position.z=Math.max(-18,Math.min(18,player.position.z));}
+const target=new THREE.Vector3(player.position.x,1.35,player.position.z);const dist=8.5;camera.position.set(player.position.x+Math.sin(yaw)*dist,player.position.y+4.4+pitch*3,player.position.z+Math.cos(yaw)*dist);camera.lookAt(target);renderer.render(scene,camera);const near=nearestShop();document.getElementById('interact').textContent=near?'OPEN '+near.data.name:'OPEN NEAREST SHOP';document.getElementById('hint').textContent=near?'Near '+near.data.name+' • Tap OPEN SHOP to browse':'Move with joystick • Drag screen to look around • Walk to a shop'}
+const clock=new THREE.Clock();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "appId": "com.virtualshoppingworld.app",
+  "appName": "VirtualShoppingWorld",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
