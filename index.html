@@ -38,6 +38,14 @@ button:active{transform:scale(.975)}
 .cartline{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #ffffff20;font-size:12px}
 .cartline button{padding:3px 8px;margin-left:5px}
 #cartToggle{pointer-events:auto;cursor:pointer}
+#lobbyPanel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(430px,92vw);max-height:78vh;overflow:auto;background:#0b1424f5;border:1px solid #ffffff50;border-radius:20px;padding:16px;display:none;pointer-events:auto;box-shadow:0 18px 60px #000a}
+#lobbyPanel h2{margin:0 0 8px;font-size:20px}
+#lobbyPanel p{font-size:12px;opacity:.8;line-height:1.4}
+#ownedItems{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.owned{border:1px solid #ffffff24;border-radius:12px;padding:10px;background:#ffffff0c;font-size:12px}
+#avatarFile{display:block;width:100%;margin:10px 0;font-size:12px}
+#timeBadge{position:absolute;top:118px;left:10px;max-width:48%;font-size:11px}
+#lobbyPanel button{margin-top:6px}
 @media(min-width:700px){#joystick{width:145px;height:145px;flex-basis:145px}#knob{left:45px;top:45px}#title{font-size:18px}}
 </style>
 </head>
@@ -48,15 +56,15 @@ button:active{transform:scale(.975)}
     <div class="pill"><div id="title">VIRTUAL SHOPPING WORLD</div><div id="sub">Explore • Discover • Shop</div></div>
     <button id="cartToggle" class="pill">🛒 Cart: <b id="cartCount">0</b><br><span id="cartTotal">₹0</span></button>
   </div>
-  <div id="storeCount" class="pill">4 stores • 16 products</div>
+  <div id="storeCount" class="pill">4 stores • 16 products</div>\n  <div id="timeBadge" class="pill">Loading local time…</div>
   <div id="hint">Move with joystick • Drag the world to look around • Walk to a shop</div>
   <div id="toast"></div>
-  <div id="cartPanel"><h3>Your shopping cart</h3><div id="cartLines"></div><div id="cartGrand" style="font-weight:800;margin:10px 0">Total: ₹0</div><button id="clearCart" style="width:100%">CLEAR CART</button></div>
+  <div id="cartPanel"><h3>Your shopping cart</h3><div id="cartLines"></div><div id="cartGrand" style="font-weight:800;margin:10px 0">Total: ₹0</div><button id="checkout" style="width:100%;background:#087f65">BUY ITEMS / CHECKOUT</button><button id="clearCart" style="width:100%">CLEAR CART</button></div>
   <div id="bottom">
     <div id="joystick"><div id="knob"></div></div>
-    <div class="actions"><button id="interact">OPEN NEAREST SHOP</button><button id="viewBtn">RESET VIEW</button></div>
+    <div class="actions"><button id="interact">OPEN NEAREST SHOP</button><button id="lobbyBtn">MY LOBBY</button><button id="viewBtn">RESET VIEW</button></div>
   </div>
-  <div id="shopPanel"><h2 id="shopName">Shop</h2><p id="shopDesc">Browse products in this store.</p><div id="items"></div><button id="closeShop" style="width:100%">CONTINUE EXPLORING</button></div>
+  <div id="lobbyPanel"><h2>My Lobby & Inventory</h2><p>Your bought items stay saved on this device. Add a clear front-facing selfie to customize your avatar face.</p><input id="avatarFile" type="file" accept="image/*" capture="user"><button id="removeFace" style="width:100%">RESET AVATAR FACE</button><h3 style="margin:14px 0 4px">Purchased items</h3><div id="ownedItems"></div><button id="closeLobby" style="width:100%">BACK TO MALL</button></div>\n  <div id="shopPanel"><h2 id="shopName">Shop</h2><p id="shopDesc">Browse products in this store.</p><div id="items"></div><button id="closeShop" style="width:100%">CONTINUE EXPLORING</button></div>
 </div>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
@@ -84,6 +92,7 @@ scene.add(sun);
 const fill=new THREE.PointLight(0xa7ddff,35,45);fill.position.set(0,7,0);scene.add(fill);
 const warm=new THREE.PointLight(0xffd59b,22,25);warm.position.set(-12,6,-8);scene.add(warm);
 const warm2=new THREE.PointLight(0xffd59b,22,25);warm2.position.set(12,6,8);scene.add(warm2);
+const neonMaterials=[],neonLights=[];
 
 function mat(color,roughness=.72,metalness=0,extra={}){return new THREE.MeshStandardMaterial({color,roughness,metalness,...extra})}
 const M={
@@ -271,6 +280,8 @@ const neck=new THREE.Mesh(new THREE.CylinderGeometry(.12,.13,.16,10),M.skin);nec
 const head=new THREE.Mesh(new THREE.SphereGeometry(.29,18,14),M.skin);head.position.y=2.05;head.castShadow=true;player.add(head);
 const hair=new THREE.Mesh(new THREE.SphereGeometry(.3,16,10,0,Math.PI*2,0,Math.PI*.58),mat(0x30231e));hair.position.y=2.15;player.add(hair);
 const face=new THREE.Mesh(new THREE.BoxGeometry(.22,.035,.02),mat(0x704b3b));face.position.set(0,1.98,.278);player.add(face);
+const faceDecalMat=new THREE.MeshBasicMaterial({transparent:true,side:THREE.DoubleSide,depthWrite:false});
+const faceDecal=new THREE.Mesh(new THREE.PlaneGeometry(.36,.40),faceDecalMat);faceDecal.position.set(0,2.05,.284);faceDecal.visible=false;player.add(faceDecal);
 const leftArm=new THREE.Group();leftArm.position.set(-.48,1.52,0);player.add(leftArm);
 const rightArm=new THREE.Group();rightArm.position.set(.48,1.52,0);player.add(rightArm);
 for(const [arm,side] of [[leftArm,-1],[rightArm,1]]){
@@ -354,6 +365,46 @@ function showToast(t){
  clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>el.style.display='none',1700);
 }
 let cart=[],activeShop=null;
+const STORAGE={cart:'vsh_cart_v3',owned:'vsh_owned_v3',face:'vsh_face_v3'};
+let owned=[];
+try{cart=JSON.parse(localStorage.getItem(STORAGE.cart)||'[]');}catch(e){cart=[]}
+try{owned=JSON.parse(localStorage.getItem(STORAGE.owned)||'[]');}catch(e){owned=[]}
+function persist(){
+ try{localStorage.setItem(STORAGE.cart,JSON.stringify(cart));localStorage.setItem(STORAGE.owned,JSON.stringify(owned));}catch(e){showToast('Device storage is full');}
+}
+function refreshOwned(){
+ const root=document.getElementById('ownedItems');root.innerHTML='';
+ if(!owned.length){root.textContent='No purchases yet. Add products to your cart and use checkout.';return}
+ owned.forEach((item,i)=>{
+  const d=document.createElement('div');d.className='owned';
+  d.innerHTML='<b></b><div></div><small></small>';
+  d.children[0].textContent=item.name;d.children[1].textContent=item.shop;d.children[2].textContent=money(item.price);
+  root.appendChild(d);
+ });
+}
+function setDayCycle(){
+ const now=new Date(),h=now.getHours()+now.getMinutes()/60;
+ let phase,sky,fogColor,sunColor,sunPower,hemiPower,neonPower,exposure;
+ if(h>=5.5&&h<10.5){phase='MORNING';sky=0xb6d5e7;fogColor=0xb6d5e7;sunColor=0xffd6a1;sunPower=2.1;hemiPower=1.8;neonPower=.12;exposure=1.05;}
+ else if(h>=10.5&&h<16.5){phase='DAY';sky=0xc6dce9;fogColor=0xc6dce9;sunColor=0xfff0d4;sunPower=2.6;hemiPower=2.0;neonPower=.08;exposure=1.12;}
+ else if(h>=16.5&&h<19.5){phase='EVENING';sky=0x795b70;fogColor=0x927b8a;sunColor=0xff8c5c;sunPower=1.05;hemiPower=.85;neonPower=1.7;exposure=.92;}
+ else {phase='NIGHT';sky=0x101a32;fogColor=0x17243b;sunColor=0x6e8ec7;sunPower=.22;hemiPower=.48;neonPower=3.2;exposure=.82;}
+ scene.background.setHex(sky);scene.fog.color.setHex(fogColor);sun.color.setHex(sunColor);sun.intensity=sunPower;
+ scene.children.forEach(o=>{if(o.isHemisphereLight)o.intensity=hemiPower;});
+ fill.intensity=phase==='NIGHT'?24:35;warm.intensity=phase==='NIGHT'?34:22;warm2.intensity=phase==='NIGHT'?34:22;
+ neonMaterials.forEach(m=>{m.toneMapped=false;m.color.multiplyScalar(phase==='NIGHT'?1.0:1.0);});
+ neonLights.forEach(l=>l.intensity=neonPower);
+ renderer.toneMappingExposure=exposure;
+ document.getElementById('timeBadge').textContent='LOCAL '+now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+' • '+phase;
+}
+function loadSavedFace(){
+ const data=localStorage.getItem(STORAGE.face);
+ if(!data)return;
+ const img=new Image();
+ img.onload=()=>{const c=document.createElement('canvas');c.width=256;c.height=256;const ctx=c.getContext('2d');const side=Math.min(img.width,img.height);ctx.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,256,256);const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.needsUpdate=true;faceDecalMat.map=tex;faceDecalMat.needsUpdate=true;faceDecal.visible=true;};
+ img.src=data;
+}
+
 function money(n){return '₹'+n.toLocaleString('en-IN')}
 function openShop(sm){
  if(!sm){showToast('Walk closer to a shop first');return}
@@ -367,7 +418,7 @@ function openShop(sm){
   const b=document.createElement('b');b.textContent=name;d.appendChild(b);
   const priceEl=document.createElement('span');priceEl.textContent=money(price);d.appendChild(priceEl);
   const add=document.createElement('button');add.textContent='ADD TO CART';
-  add.onclick=()=>{cart.push({name,price,shop:activeShop.name});updateCart();showToast(name+' added to cart')};
+  add.onclick=()=>{cart.push({name,price,shop:activeShop.name});persist();updateCart();showToast(name+' added to cart')};
   d.appendChild(add);items.appendChild(d);
  });
  document.getElementById('shopPanel').style.display='block';
@@ -385,7 +436,7 @@ function updateCart(){
   const name=document.createElement('span');name.textContent=item.name+' · '+item.shop;
   const right=document.createElement('span');right.textContent=money(item.price);
   const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Remove '+item.name);
-  remove.onclick=()=>{cart.splice(i,1);updateCart()};
+  remove.onclick=()=>{cart.splice(i,1);persist();updateCart()};
   right.appendChild(remove);line.append(name,right);lines.appendChild(line);
  });
 }
