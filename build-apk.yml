@@ -1,6 +1,6 @@
 name: Build VirtualShoppingWorld APK
 
-on:
+"on":
   push:
     branches:
       - main
