@@ -134,6 +134,28 @@ for(let z=-20;z<=20;z+=10){
  skylight.position.set(0,8.36,z+4.7);scene.add(skylight);
 }
 for(let x=-20;x<=20;x+=10)addBox(scene,.35,8.5,.35,M.white,x,4.2,0,false);
+
+// Added mall roof glazing and architectural trim for a more finished atrium.
+const roofGlass = mat(0x9bd9ef,.18,.12,{transparent:true,opacity:.32,side:THREE.DoubleSide});
+for(let z=-19;z<=19;z+=9.5){
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(8.7,.045,8.9),roofGlass);
+  panel.position.set(0,8.22,z);panel.castShadow=false;panel.receiveShadow=true;scene.add(panel);
+  for(const x of [-4.45,4.45])addBox(scene,.10,.12,8.95,M.steel,x,8.27,z,false);
+}
+for(let x=-20;x<=20;x+=5){
+  addBox(scene,.08,.12,42,M.steel,x,8.29,0,false);
+}
+// Slim architectural bands and wall-mounted accent lights.
+for(const y of [4.9,5.15]){
+  addBox(scene,47,.07,.12,M.white,0,y,-23.12,false);
+  addBox(scene,.12,.07,47,M.white,-23.12,y,0,false);
+  addBox(scene,.12,.07,47,M.white,23.12,y,0,false);
+}
+for(const z of [-18,-8,2,12]){
+  const sconce = new THREE.Mesh(new THREE.BoxGeometry(.18,.48,.12),mat(0xffe4ad,.28,.05,{emissive:0xffc56e,emissiveIntensity:.35}));
+  sconce.position.set(-23.12,3.5,z);scene.add(sconce);
+  const glow = new THREE.PointLight(0xffd89a,4,7);glow.position.set(-21.9,3.5,z);scene.add(glow);
+}
 for(let z=-15;z<=15;z+=10){
  const lightGroup=new THREE.Group();lightGroup.position.set(0,7.9,z);scene.add(lightGroup);
  addBox(lightGroup,3,.08,.5,M.white,0,0,0,false);
@@ -177,6 +199,12 @@ function makeShop(s){
  addBox(g,2.15,2.8,.16,M.dark,0,1.55,front*2.72,false);
  addBox(g,1.88,2.52,.08,M.glass,0,1.55,front*2.82,false);
  addBox(g,.06,2.45,.08,M.steel,.85,1.55,front*2.88,false);
+ // Metallic storefront framing and a slim illuminated fascia.
+ addBox(g,8.75,.10,.20,M.steel,0,4.98,front*2.82,false);
+ addBox(g,.10,2.55,.13,M.steel,-4.18,2.35,front*2.78,false);
+ addBox(g,.10,2.55,.13,M.steel,4.18,2.35,front*2.78,false);
+ const fasciaGlow = new THREE.Mesh(new THREE.BoxGeometry(7.9,.045,.07),new THREE.MeshBasicMaterial({color:s.color}));
+ fasciaGlow.position.set(0,4.48,front*2.84);g.add(fasciaGlow);
  // Front sign with actual readable store name.
  const sign=labelPlane(s.name,6.7,.88,'#'+s.color.toString(16).padStart(6,'0'));
  sign.position.set(0,5.28,front*2.9);g.add(sign);
@@ -289,92 +317,4 @@ function nearestShop(){
 }
 function showToast(t){
  const el=document.getElementById('toast');el.textContent=t;el.style.display='block';
- clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>el.style.display='none',1700);
-}
-let cart=[],activeShop=null;
-function money(n){return '₹'+n.toLocaleString('en-IN')}
-function openShop(sm){
- if(!sm){showToast('Walk closer to a shop first');return}
- activeShop=sm.data;
- document.getElementById('shopName').textContent=activeShop.name;
- document.getElementById('shopDesc').textContent=activeShop.desc;
- const items=document.getElementById('items');items.innerHTML='';
- activeShop.products.forEach(([name,price,color])=>{
-  const d=document.createElement('div');d.className='item';
-  const sw=document.createElement('div');sw.className='swatch';sw.style.background=`linear-gradient(135deg,#${color.toString(16).padStart(6,'0')},#ffffff40)`;d.appendChild(sw);
-  const b=document.createElement('b');b.textContent=name;d.appendChild(b);
-  const priceEl=document.createElement('span');priceEl.textContent=money(price);d.appendChild(priceEl);
-  const add=document.createElement('button');add.textContent='ADD TO CART';
-  add.onclick=()=>{cart.push({name,price,shop:activeShop.name});updateCart();showToast(name+' added to cart')};
-  d.appendChild(add);items.appendChild(d);
- });
- document.getElementById('shopPanel').style.display='block';
- document.getElementById('cartPanel').style.display='none';
-}
-function updateCart(){
- const total=cart.reduce((a,b)=>a+b.price,0);
- document.getElementById('cartCount').textContent=cart.length;
- document.getElementById('cartTotal').textContent=money(total);
- document.getElementById('cartGrand').textContent='Total: '+money(total);
- const lines=document.getElementById('cartLines');lines.innerHTML='';
- if(!cart.length){lines.textContent='Your cart is empty.';return}
- cart.forEach((item,i)=>{
-  const line=document.createElement('div');line.className='cartline';
-  const name=document.createElement('span');name.textContent=item.name+' · '+item.shop;
-  const right=document.createElement('span');right.textContent=money(item.price);
-  const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Remove '+item.name);
-  remove.onclick=()=>{cart.splice(i,1);updateCart()};
-  right.appendChild(remove);line.append(name,right);lines.appendChild(line);
- });
-}
-document.getElementById('interact').onclick=()=>openShop(nearestShop());
-document.getElementById('closeShop').onclick=()=>document.getElementById('shopPanel').style.display='none';
-document.getElementById('viewBtn').onclick=()=>{yaw=0;pitch=-.15;showToast('View reset')};
-document.getElementById('cartToggle').onclick=()=>{
- const panel=document.getElementById('cartPanel');
- panel.style.display=panel.style.display==='block'?'none':'block';
- document.getElementById('shopPanel').style.display='none';
- updateCart();
-};
-document.getElementById('clearCart').onclick=()=>{cart=[];updateCart();showToast('Cart cleared')};
-updateCart();
-
-const clock=new THREE.Clock();
-function animate(){
- requestAnimationFrame(animate);
- const dt=Math.min(clock.getDelta(),.04);
- if(document.getElementById('shopPanel').style.display!=='block'){
-  const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-  const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-  const dir=forward.clone().multiplyScalar(-moveY).add(right.multiplyScalar(moveX));
-  if(dir.length()>1)dir.normalize();
-  if(dir.length()>.05){
-   player.position.addScaledVector(dir,dt*3.6);
-   player.rotation.y=Math.atan2(dir.x,dir.z);
-   walkT+=dt*9;
-   leftArm.rotation.x=Math.sin(walkT)*.55;rightArm.rotation.x=-Math.sin(walkT)*.55;
-   leftLeg.rotation.x=-Math.sin(walkT)*.55;rightLeg.rotation.x=Math.sin(walkT)*.55;
-   torso.position.y=1.25+Math.abs(Math.sin(walkT))*.025;
-  }else{
-   leftArm.rotation.x*=.8;rightArm.rotation.x*=.8;leftLeg.rotation.x*=.8;rightLeg.rotation.x*=.8;torso.position.y=THREE.MathUtils.lerp(torso.position.y,1.25,.15);
-  }
-  player.position.x=THREE.MathUtils.clamp(player.position.x,-21,21);
-  player.position.z=THREE.MathUtils.clamp(player.position.z,-21,21);
- }
- const target=new THREE.Vector3(player.position.x,1.25,player.position.z);
- const dist=8.3;
- const desired=new THREE.Vector3(player.position.x+Math.sin(yaw)*dist,player.position.y+4.1+pitch*2.5,player.position.z+Math.cos(yaw)*dist);
- camera.position.lerp(desired,.12);camera.lookAt(target);
- const near=nearestShop();
- document.getElementById('interact').textContent=near?'OPEN '+near.data.name:'OPEN NEAREST SHOP';
- document.getElementById('hint').textContent=near?'Near '+near.data.name+' • Tap OPEN SHOP to browse':'Move with joystick • Drag the world to look around • Walk to a shop';
- renderer.render(scene,camera);
-}
-window.addEventListener('resize',()=>{
- camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
- renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
-});
-animate();
-</script>
-</body>
-</html>
+ clearTimeout(showToast.timer);s
