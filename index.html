@@ -280,6 +280,31 @@ function addCityBuilding(x,z,w,d,h,style=0){
  const facade=mat(palettes[style%palettes.length],.82,.08);
  const base=addBox(g,w,h,d,facade,0,h/2,0,true,true);
  base.castShadow=true; cityBuildings.push({x,z,w,d,h});
+ // Architectural detail pass: facade pilasters, floor bands, window reveals and glass reflections.
+ const trimMats=[
+  mat(0xd3d7d8,.5,.32),mat(0x56646c,.45,.62),mat(0xc0b39e,.72,.12),
+  mat(0x273945,.4,.55)
+ ];
+ const trim=trimMats[style%trimMats.length];
+ const floors=Math.max(2,Math.floor((h-1.5)/3.1));
+ for(let floor=1;floor<=floors;floor++){
+  const fy=Math.min(h-.35, floor*3.05);
+  addBox(g,w+.10,.10,d+.10,trim,0,fy,0,false);
+ }
+ // Vertical structural fins break up the flat box silhouette.
+ const fins=Math.max(2,Math.floor(w/4));
+ for(let i=0;i<=fins;i++){
+  const fx=-w/2+i*w/fins;
+  addBox(g,.11,h-.65,.13,trim,fx,h/2,d/2+.07,false);
+  addBox(g,.11,h-.65,.13,trim,fx,h/2,-d/2-.07,false);
+ }
+ // Recessed, reflective ground-floor glazing with a canopy and mullions.
+ addBox(g,w*.94,Math.min(3.3,h*.2),.10,windowMat,0,Math.min(1.85,h*.12),d/2+.055,false);
+ addBox(g,w*.98,.18,.85,metalMat,0,Math.min(3.15,h*.2),d/2+.38,false);
+ for(let k=0;k<=Math.max(2,Math.floor(w/1.6));k++){
+  const gx=-w*.46+k*(w*.92/Math.max(2,Math.floor(w/1.6)));
+  addBox(g,.055,Math.min(3.3,h*.2),.12,trim,gx,Math.min(1.85,h*.12),d/2+.12,false);
+ }
  citySolidRects.push({x,z,hx:w/2+.35,hz:d/2+.35});
  // Ground floor glazing and dark shopfront band.
  addBox(g,w*.92,Math.min(3.2,h*.2),.08,windowMat,0,Math.min(1.9,h*.12),d/2+.045,false);
@@ -292,8 +317,18 @@ function addCityBuilding(x,z,w,d,h,style=0){
    const wx=-w/2+(col+.5)*w/cols, wy=1.65+row*((h-2.5)/rows);
    const winmat=((row+col+style)%9===0)?litWindowMat:windowMat;
    for(const side of [-1,1]){
-    const win=addBox(g,ww,wh,.045,winmat,wx,wy,side*(d/2+.025),false);
+    const zFace=side*(d/2+.055);
+    // Dark reveal, glazing, pale sill and lintel make each window read as an opening.
+    addBox(g,ww+.20,wh+.20,.055,trim,wx,wy,zFace-side*.015,false);
+    const win=addBox(g,ww,wh,.065,winmat,wx,wy,zFace+side*.025,false);
     if(side===1 && row===0 && style%3===0) win.material=windowMat;
+    addBox(g,ww+.18,.07,.10,trim,wx,wy-wh/2-.035,zFace+side*.06,false);
+    addBox(g,ww+.18,.07,.10,trim,wx,wy+wh/2+.035,zFace+side*.06,false);
+    addBox(g,.055,wh,.10,trim,wx-ww/2-.025,wy,zFace+side*.06,false);
+    addBox(g,.055,wh,.10,trim,wx+ww/2+.025,wy,zFace+side*.06,false);
+    // Thin central mullion and a subtle glass reflection strip.
+    addBox(g,.035,wh,.11,metalMat,wx,wy,zFace+side*.075,false);
+    addBox(g,.08,wh*.82,.025,mat(0x9bbbc9,.2,.65,{transparent:true,opacity:.42}),wx-ww*.27,wy,zFace+side*.085,false);
    }
    // side windows are set back on the side faces
    if(col%2===0){
@@ -313,6 +348,14 @@ function addCityBuilding(x,z,w,d,h,style=0){
   const neon=mat([0x19d7ff,0xff3e9d,0xffb52e,0x8b5cff][style%4],.25,.1,{emissive:[0x19d7ff,0xff3e9d,0xffb52e,0x8b5cff][style%4],emissiveIntensity:.65});
   cityNeonMaterials.push(neon);
   addBox(g,w*.52,.18,.14,neon,0,h*.78,d/2+.12,false);
+ }
+ // Street-level awning, signage panel and entrance portal for retail-facing buildings.
+ if(style%3===0){
+  const awningMat=mat([0x344c5c,0x76554a,0x365f56,0x3d466a][style%4],.58,.18);
+  addBox(g,w*.78,.16,.95,awningMat,0,3.05,d/2+.46,false);
+  addBox(g,w*.70,.48,.11,trim,0,3.65,d/2+.13,false);
+  addBox(g,.14,2.45,.16,metalMat,-w*.39,1.55,d/2+.14,false);
+  addBox(g,.14,2.45,.16,metalMat,w*.39,1.55,d/2+.14,false);
  }
 }
 function sideX(w,style){return (style%2?1:-1)*(w/2+.025);}
@@ -390,6 +433,29 @@ function buildCity(){
  car(-28,-11,0x2d6fa3);car(28,11,0xb9bfc4,Math.PI);car(-52,4,0x9b3d3d,Math.PI/2);car(52,-4,0x242d35,-Math.PI/2);
 }
 buildCity();
+
+// Extra streetscape details: curb cuts, bollards, benches and planted medians.
+const bollardMat=mat(0x58636a,.45,.65);
+for(const z of [-32,6,44,82]){
+ for(const x of [-30,-8,30,68,87]){
+  for(let j=0;j<3;j++){
+   const bx=x+j*.55;
+   const b=new THREE.Mesh(new THREE.CylinderGeometry(.10,.13,.72,8),bollardMat);
+   b.position.set(bx,.36,z);scene.add(b);
+   const cap=new THREE.Mesh(new THREE.CylinderGeometry(.105,.105,.08,8),mat(0xd5dadd,.3,.45));
+   cap.position.set(bx,.72,z);scene.add(cap);
+  }
+ }
+}
+function addCityBench(x,z,rot=0){
+ const b=new THREE.Group();scene.add(b);b.position.set(x,0,z);b.rotation.y=rot;
+ cityBox(1.8,.14,.52,mat(0x70543c,.75),x,.62,z,false);
+ cityBox(1.8,.12,.12,metalMat,x,.84,z-.18,false);
+ cityBox(1.8,.12,.12,metalMat,x,.84,z+.18,false);
+ for(const dx of [-.65,.65])cityBox(.10,.62,.10,metalMat,x+dx,.31,z,false);
+}
+addCityBench(-31,-15,.1);addCityBench(31,15,.1);addCityBench(-15,31,Math.PI/2);addCityBench(15,-31,Math.PI/2);
+
 // A city destination marker gives the player a visible reason to explore beyond the mall.
 const plazaRing=new THREE.Mesh(new THREE.TorusGeometry(2.2,.11,8,36),mat(0x39d8e8,.25,.3,{emissive:0x149bb0,emissiveIntensity:.5}));
 plazaRing.rotation.x=Math.PI/2;plazaRing.position.set(38,.08,38);scene.add(plazaRing);
@@ -452,6 +518,9 @@ const shadow=new THREE.Mesh(new THREE.CircleGeometry(.58,24),new THREE.MeshBasic
 shadow.rotation.x=-Math.PI/2;shadow.position.y=.018;player.add(shadow);
 
 let yaw=0,pitch=-.15,moveX=0,moveY=0,dragging=false,lastX=0,lastY=0,walkT=0;
+let velocityX=0,velocityZ=0,smoothedYaw=0;
+const cameraLookSmoothed=new THREE.Vector3();
+let cameraInitialized=false;
 // Collision helpers: keep the player inside the mall and out of solid shop/prop geometry.
 const PLAYER_RADIUS=.48;
 const cameraRay=new THREE.Raycaster();
@@ -504,8 +573,8 @@ renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.cli
 window.addEventListener('pointerup',()=>dragging=false);
 window.addEventListener('pointermove',e=>{
  if(dragging&&e.target===renderer.domElement){
-  yaw-=(e.clientX-lastX)*.0045;
-  pitch=Math.max(-.55,Math.min(.16,pitch+(e.clientY-lastY)*.0025));
+  yaw-=(e.clientX-lastX)*.0034;
+  pitch=Math.max(-.48,Math.min(.12,pitch+(e.clientY-lastY)*.0019));
   lastX=e.clientX;lastY=e.clientY;
  }
 });
@@ -613,48 +682,63 @@ const clock=new THREE.Clock();
 function animate(){
  requestAnimationFrame(animate);
  const dt=Math.min(clock.getDelta(),.04);
+ const smooth=(rate,delta)=>1-Math.exp(-rate*delta);
  if(document.getElementById('shopPanel').style.display!=='block'){
   const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
   const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-  const dir=forward.clone().multiplyScalar(-moveY).add(right.multiplyScalar(moveX));
-  if(dir.length()>1)dir.normalize();
-  if(dir.length()>.05){
-   const step=dt*6.0;
-   movePlayerWithCollision(dir.x*step,dir.z*step);
-   player.rotation.y=Math.atan2(dir.x,dir.z);
-   walkT+=dt*9;
-   leftArm.rotation.x=Math.sin(walkT)*.55;rightArm.rotation.x=-Math.sin(walkT)*.55;
-   leftLeg.rotation.x=-Math.sin(walkT)*.55;rightLeg.rotation.x=Math.sin(walkT)*.55;
-   torso.position.y=1.25+Math.abs(Math.sin(walkT))*.025;
+  const input=forward.multiplyScalar(-moveY).add(right.multiplyScalar(moveX));
+  if(input.length()>1)input.normalize();
+  const targetVX=input.x*5.0,targetVZ=input.z*5.0;
+  const accel=(Math.abs(moveX)+Math.abs(moveY)>.05)?12:16;
+  const velBlend=smooth(accel,dt);
+  velocityX=THREE.MathUtils.lerp(velocityX,targetVX,velBlend);
+  velocityZ=THREE.MathUtils.lerp(velocityZ,targetVZ,velBlend);
+  // Avoid tiny residual movement when joystick is released.
+  if(Math.abs(velocityX)<.018)velocityX=0;
+  if(Math.abs(velocityZ)<.018)velocityZ=0;
+  const dx=velocityX*dt,dz=velocityZ*dt;
+  movePlayerWithCollision(dx,dz);
+  const speed=Math.hypot(velocityX,velocityZ);
+  if(speed>.12){
+   const desiredRot=Math.atan2(velocityX,velocityZ);
+   let angleDelta=((desiredRot-player.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+   player.rotation.y+=angleDelta*(1-Math.exp(-11*dt));
+   walkT+=dt*(5.5+speed*1.6);
+   const stride=Math.min(1,speed/4.5);
+   leftArm.rotation.x=THREE.MathUtils.lerp(leftArm.rotation.x,Math.sin(walkT)*.48*stride,1-Math.exp(-14*dt));
+   rightArm.rotation.x=THREE.MathUtils.lerp(rightArm.rotation.x,-Math.sin(walkT)*.48*stride,1-Math.exp(-14*dt));
+   leftLeg.rotation.x=THREE.MathUtils.lerp(leftLeg.rotation.x,-Math.sin(walkT)*.5*stride,1-Math.exp(-14*dt));
+   rightLeg.rotation.x=THREE.MathUtils.lerp(rightLeg.rotation.x,Math.sin(walkT)*.5*stride,1-Math.exp(-14*dt));
+   torso.position.y=THREE.MathUtils.lerp(torso.position.y,1.25+Math.abs(Math.sin(walkT))*.035*stride,1-Math.exp(-12*dt));
   }else{
-   leftArm.rotation.x*=.8;rightArm.rotation.x*=.8;leftLeg.rotation.x*=.8;rightLeg.rotation.x*=.8;torso.position.y=THREE.MathUtils.lerp(torso.position.y,1.25,.15);
+   leftArm.rotation.x=THREE.MathUtils.lerp(leftArm.rotation.x,0,1-Math.exp(-10*dt));
+   rightArm.rotation.x=THREE.MathUtils.lerp(rightArm.rotation.x,0,1-Math.exp(-10*dt));
+   leftLeg.rotation.x=THREE.MathUtils.lerp(leftLeg.rotation.x,0,1-Math.exp(-10*dt));
+   rightLeg.rotation.x=THREE.MathUtils.lerp(rightLeg.rotation.x,0,1-Math.exp(-10*dt));
+   torso.position.y=THREE.MathUtils.lerp(torso.position.y,1.25,1-Math.exp(-10*dt));
   }
  }
  cameraTarget.set(player.position.x,1.35,player.position.z);
- const dist=8.3;
+ // Use the look yaw to compute a stable over-the-shoulder camera position.
+ const dist=7.4;
  cameraDesired.set(
-  THREE.MathUtils.clamp(player.position.x+Math.sin(yaw)*dist,-98,98),
-  THREE.MathUtils.clamp(player.position.y+4.1+pitch*2.5,2.1,7.5),
-  THREE.MathUtils.clamp(player.position.z+Math.cos(yaw)*dist,-98,98)
+  THREE.MathUtils.clamp(player.position.x+Math.sin(yaw)*dist,-100,100),
+  THREE.MathUtils.clamp(player.position.y+3.35+pitch*2.1,2.25,7.2),
+  THREE.MathUtils.clamp(player.position.z+Math.cos(yaw)*dist,-100,100)
  );
- cameraDirection.copy(cameraDesired).sub(cameraTarget);
- const wantedDistance=cameraDirection.length();
- cameraDirection.normalize();
- cameraRay.set(cameraTarget,cameraDirection);
- cameraRay.far=wantedDistance;
- // Pull the camera forward when a wall/storefront is between it and the player.
- const cameraHits=cameraRay.intersectObjects(scene.children,true).filter(hit=>{
-  let node=hit.object;
-  while(node){if(node===player)return false;node=node.parent;}
-  return hit.object.visible && hit.distance>.35 && hit.object!==renderer.domElement;
- });
- let safeDistance=wantedDistance;
- if(cameraHits.length) safeDistance=Math.max(2.0,Math.min(wantedDistance,cameraHits[0].distance-.35));
- const safeCamera=cameraTarget.clone().addScaledVector(cameraDirection,safeDistance);
- camera.position.lerp(safeCamera,.22);
+ // Stable camera follow: no raycast against the entire scene (which caused ground/building hits
+ // to jerk the camera or pull it through geometry). Smooth both camera position and look target.
+ if(!cameraInitialized){
+  camera.position.copy(cameraDesired);
+  cameraLookSmoothed.copy(cameraTarget);
+  cameraInitialized=true;
+ }
+ const camBlend=1-Math.exp(-5.5*dt);
+ camera.position.lerp(cameraDesired,camBlend);
+ cameraLookSmoothed.lerp(cameraTarget,1-Math.exp(-8.5*dt));
  camera.position.x=THREE.MathUtils.clamp(camera.position.x,-101,101);
  camera.position.z=THREE.MathUtils.clamp(camera.position.z,-101,101);
- camera.lookAt(cameraTarget);
+ camera.lookAt(cameraLookSmoothed);
  const near=nearestShop();
  document.getElementById('interact').textContent=near?'OPEN '+near.data.name:'OPEN NEAREST SHOP';
  document.getElementById('hint').textContent=near?'Near '+near.data.name+' • Tap OPEN SHOP to browse':'Move with joystick • Drag the world to look around • Walk to a shop';
