@@ -287,6 +287,40 @@ const shadow=new THREE.Mesh(new THREE.CircleGeometry(.58,24),new THREE.MeshBasic
 shadow.rotation.x=-Math.PI/2;shadow.position.y=.018;player.add(shadow);
 
 let yaw=0,pitch=-.15,moveX=0,moveY=0,dragging=false,lastX=0,lastY=0,walkT=0;
+// Collision helpers: keep the player inside the mall and out of solid shop/prop geometry.
+const PLAYER_RADIUS=.48;
+const cameraRay=new THREE.Raycaster();
+const cameraTarget=new THREE.Vector3(),cameraDesired=new THREE.Vector3(),cameraDirection=new THREE.Vector3();
+function circleHitsRect(x,z,cx,cz,hx,hz,r=PLAYER_RADIUS){
+ const px=THREE.MathUtils.clamp(x,cx-hx,cx+hx);
+ const pz=THREE.MathUtils.clamp(z,cz-hz,cz+hz);
+ return (x-px)*(x-px)+(z-pz)*(z-pz)<r*r;
+}
+function blockedPosition(x,z){
+ // Shop shells have a central doorway on the aisle-facing wall.
+ for(const sm of shopMeshes){
+  const sx=sm.data.x,sz=sm.data.z;
+  const hx=4.3,hz=2.65;
+  if(!circleHitsRect(x,z,sx,sz,hx,hz)) continue;
+  const onFront=Math.abs(z-(sz+sm.front*hz))<PLAYER_RADIUS+.12;
+  const doorway=Math.abs(x-sx)<1.05;
+  if(onFront&&doorway) continue;
+  return true;
+ }
+ // Benches and planters are solid obstacles.
+ for(const [bx,bz] of [[0,-4],[0,4],[-19,-18],[19,-18],[-19,18],[19,18],[-5,-17],[5,-17],[-5,17],[5,17]]){
+  const r=(Math.abs(bx)===19||Math.abs(bz)===18)?.62:.95;
+  if(Math.hypot(x-bx,z-bz)<r+PLAYER_RADIUS) return true;
+ }
+ // Keep a little clearance from the outer walls.
+ return x < -21.2 || x > 21.2 || z < -21.2 || z > 21.2;
+}
+function movePlayerWithCollision(dx,dz){
+ const x=player.position.x,z=player.position.z;
+ // Axis-separated movement allows the character to slide along walls instead of sticking.
+ if(!blockedPosition(x+dx,z)) player.position.x=x+dx;
+ if(!blockedPosition(player.position.x,z+dz)) player.position.z=z+dz;
+}
 const joystick=document.getElementById('joystick'),knob=document.getElementById('knob');
 function joy(e){
  const r=joystick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
@@ -377,7 +411,8 @@ function animate(){
   const dir=forward.clone().multiplyScalar(-moveY).add(right.multiplyScalar(moveX));
   if(dir.length()>1)dir.normalize();
   if(dir.length()>.05){
-   player.position.addScaledVector(dir,dt*3.6);
+   const step=dt*3.6;
+   movePlayerWithCollision(dir.x*step,dir.z*step);
    player.rotation.y=Math.atan2(dir.x,dir.z);
    walkT+=dt*9;
    leftArm.rotation.x=Math.sin(walkT)*.55;rightArm.rotation.x=-Math.sin(walkT)*.55;
@@ -386,13 +421,32 @@ function animate(){
   }else{
    leftArm.rotation.x*=.8;rightArm.rotation.x*=.8;leftLeg.rotation.x*=.8;rightLeg.rotation.x*=.8;torso.position.y=THREE.MathUtils.lerp(torso.position.y,1.25,.15);
   }
-  player.position.x=THREE.MathUtils.clamp(player.position.x,-21,21);
-  player.position.z=THREE.MathUtils.clamp(player.position.z,-21,21);
  }
- const target=new THREE.Vector3(player.position.x,1.25,player.position.z);
+ cameraTarget.set(player.position.x,1.35,player.position.z);
  const dist=8.3;
- const desired=new THREE.Vector3(player.position.x+Math.sin(yaw)*dist,player.position.y+4.1+pitch*2.5,player.position.z+Math.cos(yaw)*dist);
- camera.position.lerp(desired,.12);camera.lookAt(target);
+ cameraDesired.set(
+  THREE.MathUtils.clamp(player.position.x+Math.sin(yaw)*dist,-20.2,20.2),
+  THREE.MathUtils.clamp(player.position.y+4.1+pitch*2.5,2.1,7.5),
+  THREE.MathUtils.clamp(player.position.z+Math.cos(yaw)*dist,-20.2,20.2)
+ );
+ cameraDirection.copy(cameraDesired).sub(cameraTarget);
+ const wantedDistance=cameraDirection.length();
+ cameraDirection.normalize();
+ cameraRay.set(cameraTarget,cameraDirection);
+ cameraRay.far=wantedDistance;
+ // Pull the camera forward when a wall/storefront is between it and the player.
+ const cameraHits=cameraRay.intersectObjects(scene.children,true).filter(hit=>{
+  let node=hit.object;
+  while(node){if(node===player)return false;node=node.parent;}
+  return hit.object.visible && hit.distance>.35 && hit.object!==renderer.domElement;
+ });
+ let safeDistance=wantedDistance;
+ if(cameraHits.length) safeDistance=Math.max(2.0,Math.min(wantedDistance,cameraHits[0].distance-.35));
+ const safeCamera=cameraTarget.clone().addScaledVector(cameraDirection,safeDistance);
+ camera.position.lerp(safeCamera,.22);
+ camera.position.x=THREE.MathUtils.clamp(camera.position.x,-21,21);
+ camera.position.z=THREE.MathUtils.clamp(camera.position.z,-21,21);
+ camera.lookAt(cameraTarget);
  const near=nearestShop();
  document.getElementById('interact').textContent=near?'OPEN '+near.data.name:'OPEN NEAREST SHOP';
  document.getElementById('hint').textContent=near?'Near '+near.data.name+' • Tap OPEN SHOP to browse':'Move with joystick • Drag the world to look around • Walk to a shop';
